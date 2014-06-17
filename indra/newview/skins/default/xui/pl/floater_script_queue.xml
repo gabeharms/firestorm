@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="utf-8" standalone="yes"?>
+<floater name="queue" title="Postęp resetowania">
+	<floater.string name="Starting">
+		[START] z [COUNT] obiektów.
+	</floater.string>
+	<floater.string name="Done">
+		Gotowe.
+	</floater.string>
+	<floater.string name="Resetting">
+		Trwa resetowanie
+	</floater.string>
+	<floater.string name="Running">
+		Skrypt działa
+	</floater.string>
+	<floater.string name="NotRunning">
+		Skrypt nie działa
+	</floater.string>
+	<floater.string name="Deleting">
+		Usuwanie
+	</floater.string>
+	<button label="Zamknij" label_selected="Zamknij" name="close"/>
+</floater>

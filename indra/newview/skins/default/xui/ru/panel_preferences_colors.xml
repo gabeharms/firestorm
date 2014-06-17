@@ -1,0 +1,54 @@
+<?xml version="1.0" encoding="utf-8" standalone="yes"?>
+<panel label="Цвета" name="colors_panel">
+	<text name="effects_color_textbox">
+		Выбор эффектов (Частицы): 
+	</text>
+	<color_swatch name="effect_color_swatch" tool_tip="Нажмите, чтобы открыть палитру цветов"/>
+	<text name="font_colors">
+		Цвет текста UI: 
+	</text>
+	<text name="text_box1">
+		Мой текст 
+	</text>
+	<text name="text_box2">
+		Других 
+	</text>
+	<text name="text_box3">
+		Объектов 
+	</text>
+	<text name="text_box4">
+		Система
+	</text>
+	<text name="text_box5">
+		Ошибки 
+	</text>
+	<text name="text_box10">
+		Непосредственный
+	</text>
+	<text name="text_box7">
+		Владелец
+	</text>
+	<text name="text_box9">
+		Ссылки
+	</text>
+	<text name="bubble_chat">
+		Статус / Чат пузырьками / Прозрачность консоли:
+	</text>
+	<text name="ScriptDialogFgLabel">
+		Скрипты перед
+	</text>
+	<text name="ScriptDialogBgLabel">
+		Скрипты задн
+	</text>
+	<check_box label="Показать диалоги скриптов всегда на непрозрачном фоне" name="FSScriptDialogNoTransparency"/>
+	<check_box label="Заменить задний фон и прозрачность круглого меню" name="override_pie_color_checkbox"/>
+	<color_swatch name="background" tool_tip="Цвет имени аватара"/>
+	<slider label="Прозрачность:" name="bubble_chat_opacity" tool_tip="Выберите приглушенность / прозрачность"/>
+	<slider label="Прозрачность:" name="pie_menu_opacity"/>
+	<slider label="Выведение:" name="pie_menu_fade_out"/>
+	<text name="floater_opacity">
+		Прозрачность всплывающих окон: 
+	</text>
+	<slider label="Активное:" name="active"/>
+	<slider label="Не активное:" name="inactive"/>
+</panel>

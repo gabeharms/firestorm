@@ -1,0 +1,1717 @@
+/** 
+ * @file llfloatersnapshot.cpp
+ * @brief Snapshot preview window, allowing saving, e-mailing, etc.
+ *
+ * $LicenseInfo:firstyear=2004&license=viewerlgpl$
+ * Second Life Viewer Source Code
+ * Copyright (C) 2010, Linden Research, Inc.
+ * 
+ * This library is free software; you can redistribute it and/or
+ * modify it under the terms of the GNU Lesser General Public
+ * License as published by the Free Software Foundation;
+ * version 2.1 of the License only.
+ * 
+ * This library is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+ * Lesser General Public License for more details.
+ * 
+ * You should have received a copy of the GNU Lesser General Public
+ * License along with this library; if not, write to the Free Software
+ * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301  USA
+ * 
+ * Linden Research, Inc., 945 Battery Street, San Francisco, CA  94111  USA
+ * $/LicenseInfo$
+ */
+
+#include "llviewerprecompiledheaders.h"
+
+#include "llfloatersnapshot.h"
+
+#include "llagent.h"
+#include "llfacebookconnect.h"
+#include "llfloaterreg.h"
+#include "llfloatersocial.h"
+#include "llcheckboxctrl.h"
+#include "llcombobox.h"
+#include "llpostcard.h"
+#include "llresmgr.h"		// LLLocale
+#include "llsdserialize.h"
+#include "llsidetraypanelcontainer.h"
+#include "llsnapshotlivepreview.h"
+#include "llspinctrl.h"
+#include "llviewercontrol.h"
+#include "lltoolfocus.h"
+#include "lltoolmgr.h"
+#include "llwebprofile.h"
+
+// <FS:CR> FIRE-9621 - Hide Profile panel on Snapshots on non-sl grids
+#ifdef OPENSIM
+#include "llviewernetwork.h" // isOpenSim()
+#endif // OPENSIM
+#include "llviewerregion.h" // <FS:CR> getCentralBakeVersion() for temporary texture uploads
+// </FS:CR>
+
+///----------------------------------------------------------------------------
+/// Local function declarations, constants, enums, and typedefs
+///----------------------------------------------------------------------------
+LLUICtrl* LLFloaterSnapshot::sThumbnailPlaceholder = NULL;
+LLSnapshotFloaterView* gSnapshotFloaterView = NULL;
+
+const F32 AUTO_SNAPSHOT_TIME_DELAY = 1.f;
+
+const S32 MAX_POSTCARD_DATASIZE = 1024 * 1024; // one megabyte
+const S32 MAX_TEXTURE_SIZE = 512 ; //max upload texture size 512 * 512
+
+static LLDefaultChildRegistry::Register<LLSnapshotFloaterView> r("snapshot_floater_view");
+
+
+///----------------------------------------------------------------------------
+/// Class LLFloaterSnapshot::Impl
+///----------------------------------------------------------------------------
+
+class LLFloaterSnapshot::Impl
+{
+	LOG_CLASS(LLFloaterSnapshot::Impl);
+public:
+	typedef enum e_status
+	{
+		STATUS_READY,
+		STATUS_WORKING,
+		STATUS_FINISHED
+	} EStatus;
+
+	Impl()
+	:	mAvatarPauseHandles(),
+		mLastToolset(NULL),
+		// mAspectRatioCheckOff(false),	// <FS:Zi> Save all settings
+		mNeedRefresh(false),
+		mStatus(STATUS_READY)
+	{
+	}
+	~Impl()
+	{
+		//unpause avatars
+		mAvatarPauseHandles.clear();
+
+	}
+	static void onClickNewSnapshot(void* data);
+	static void onClickAutoSnap(LLUICtrl *ctrl, void* data);
+	//static void onClickAdvanceSnap(LLUICtrl *ctrl, void* data);
+	static void onClickMore(void* data) ;
+	static void onClickUICheck(LLUICtrl *ctrl, void* data);
+	static void onClickHUDCheck(LLUICtrl *ctrl, void* data);
+	static void applyKeepAspectCheck(LLFloaterSnapshot* view, BOOL checked);
+	// static void applyTempUploadCheck(LLFloaterSnapshot* view, BOOL checked); //FS:LO Fire-6268 [Regression] Temp upload for snapshots missing after FUI merge.	// <FS:Zi> Save all settings
+	static void updateResolution(LLUICtrl* ctrl, void* data, BOOL do_update = TRUE);
+	static void onCommitFreezeFrame(LLUICtrl* ctrl, void* data);
+	static void onCommitLayerTypes(LLUICtrl* ctrl, void*data);
+	static void onImageQualityChange(LLFloaterSnapshot* view, S32 quality_val);
+	static void onImageFormatChange(LLFloaterSnapshot* view);
+	static void applyCustomResolution(LLFloaterSnapshot* view, S32 w, S32 h);
+	static void onSnapshotUploadFinished(bool status);
+	static void onSendingPostcardFinished(bool status);
+	static BOOL checkImageSize(LLSnapshotLivePreview* previewp, S32& width, S32& height, BOOL isWidthChanged, S32 max_value);
+	static void setImageSizeSpinnersValues(LLFloaterSnapshot *view, S32 width, S32 height) ;
+	static void updateSpinners(LLFloaterSnapshot* view, LLSnapshotLivePreview* previewp, S32& width, S32& height, BOOL is_width_changed);
+
+	static LLPanelSnapshot* getActivePanel(LLFloaterSnapshot* floater, bool ok_if_not_found = true);
+	static LLSnapshotLivePreview::ESnapshotType getActiveSnapshotType(LLFloaterSnapshot* floater);
+	static LLFloaterSnapshot::ESnapshotFormat getImageFormat(LLFloaterSnapshot* floater);
+	static LLSpinCtrl* getWidthSpinner(LLFloaterSnapshot* floater);
+	static LLSpinCtrl* getHeightSpinner(LLFloaterSnapshot* floater);
+	// <FS:Zi> Save all settings
+	// static void enableAspectRatioCheckbox(LLFloaterSnapshot* floater, BOOL enable);
+	// static void setAspectRatioCheckboxValue(LLFloaterSnapshot* floater, BOOL checked);
+	// static void setTempUploadCheckboxValue(LLFloaterSnapshot* floater, BOOL checked); //FS:LO Fire-6268 [Regression] Temp upload for snapshots missing after FUI merge.
+	// </FS:Zi>
+
+	static LLSnapshotLivePreview* getPreviewView(LLFloaterSnapshot *floater);
+	static void setResolution(LLFloaterSnapshot* floater, const std::string& comboname);
+	static void updateControls(LLFloaterSnapshot* floater);
+	static void updateLayout(LLFloaterSnapshot* floater,BOOL closingFloater=FALSE);
+	static void setStatus(EStatus status, bool ok = true, const std::string& msg = LLStringUtil::null);
+	EStatus getStatus() const { return mStatus; }
+	static void setNeedRefresh(LLFloaterSnapshot* floater, bool need);
+
+private:
+	static LLViewerWindow::ESnapshotType getLayerType(LLFloaterSnapshot* floater);
+	// static void comboSetCustom(LLFloaterSnapshot *floater, const std::string& comboname);	// <FS:Zi> Save all settings
+	static void checkAutoSnapshot(LLSnapshotLivePreview* floater, BOOL update_thumbnail = FALSE);
+	static void checkAspectRatio(LLFloaterSnapshot *view, S32 index) ;
+	static void setWorking(LLFloaterSnapshot* floater, bool working);
+	static void setFinished(LLFloaterSnapshot* floater, bool finished, bool ok = true, const std::string& msg = LLStringUtil::null);
+
+
+public:
+	std::vector<LLAnimPauseRequest> mAvatarPauseHandles;
+
+	LLToolset*	mLastToolset;
+	LLHandle<LLView> mPreviewHandle;
+	// bool mAspectRatioCheckOff ;	// <FS:Zi> Save all settings
+	bool mNeedRefresh;
+	EStatus mStatus;
+};
+
+// static
+LLPanelSnapshot* LLFloaterSnapshot::Impl::getActivePanel(LLFloaterSnapshot* floater, bool ok_if_not_found)
+{
+	// <FS:Zi> We don't use the <panel_container> in the new version, since a tab widget makes a lot more sense
+//	LLSideTrayPanelContainer* panel_container = floater->getChild<LLSideTrayPanelContainer>("panel_container");
+//	LLPanelSnapshot* active_panel = dynamic_cast<LLPanelSnapshot*>(panel_container->getCurrentPanel());
+//	if (!ok_if_not_found)
+//	{
+//		llassert_always(active_panel != NULL);
+//	}
+	LLTabContainer* tab_container=floater->getChild<LLTabContainer>("panel_tab_container");
+	LLPanelSnapshot* active_panel=(LLPanelSnapshot*) tab_container->getCurrentPanel();
+	// </FS:Zi>
+	return active_panel;
+}
+
+// static
+LLSnapshotLivePreview::ESnapshotType LLFloaterSnapshot::Impl::getActiveSnapshotType(LLFloaterSnapshot* floater)
+{
+	LLSnapshotLivePreview::ESnapshotType type = LLSnapshotLivePreview::SNAPSHOT_WEB;
+	std::string name;
+	LLPanelSnapshot* spanel = getActivePanel(floater);
+
+	if (spanel)
+	{
+		name = spanel->getName();
+	}
+
+	if (name == "panel_snapshot_postcard")
+	{
+		type = LLSnapshotLivePreview::SNAPSHOT_POSTCARD;
+	}
+	else if (name == "panel_snapshot_inventory")
+	{
+		type = LLSnapshotLivePreview::SNAPSHOT_TEXTURE;
+	}
+	else if (name == "panel_snapshot_local")
+	{
+		type = LLSnapshotLivePreview::SNAPSHOT_LOCAL;
+	}
+	else if (name == "panel_snapshot_flickr")
+	{
+		type = LLSnapshotLivePreview::SNAPSHOT_FLICKR;
+	}
+
+	return type;
+}
+
+// static
+LLFloaterSnapshot::ESnapshotFormat LLFloaterSnapshot::Impl::getImageFormat(LLFloaterSnapshot* floater)
+{
+	LLPanelSnapshot* active_panel = getActivePanel(floater);
+	// FIXME: if the default is not PNG, profile uploads may fail.
+	return active_panel ? active_panel->getImageFormat() : LLFloaterSnapshot::SNAPSHOT_FORMAT_PNG;
+}
+
+// static
+LLSpinCtrl* LLFloaterSnapshot::Impl::getWidthSpinner(LLFloaterSnapshot* floater)
+{
+	LLPanelSnapshot* active_panel = getActivePanel(floater);
+	return active_panel ? active_panel->getWidthSpinner() : floater->getChild<LLSpinCtrl>("snapshot_width");
+}
+
+// static
+LLSpinCtrl* LLFloaterSnapshot::Impl::getHeightSpinner(LLFloaterSnapshot* floater)
+{
+	LLPanelSnapshot* active_panel = getActivePanel(floater);
+	return active_panel ? active_panel->getHeightSpinner() : floater->getChild<LLSpinCtrl>("snapshot_height");
+}
+
+// <FS:Zi> Save all settings
+// static
+// void LLFloaterSnapshot::Impl::enableAspectRatioCheckbox(LLFloaterSnapshot* floater, BOOL enable)
+// {
+// 	LLPanelSnapshot* active_panel = getActivePanel(floater);
+// 	if (active_panel)
+// 	{
+// 		active_panel->enableAspectRatioCheckbox(enable);
+// 	}
+// }
+
+// static
+// void LLFloaterSnapshot::Impl::setAspectRatioCheckboxValue(LLFloaterSnapshot* floater, BOOL checked)
+// {
+// 	LLPanelSnapshot* active_panel = getActivePanel(floater);
+// 	if (active_panel)
+// 	{
+// 		active_panel->getChild<LLUICtrl>(active_panel->getAspectRatioCBName())->setValue(checked);
+// 	}
+// }
+
+//FS:LO Fire-6268 [Regression] Temp upload for snapshots missing after FUI merge.
+// static
+// void LLFloaterSnapshot::Impl::setTempUploadCheckboxValue(LLFloaterSnapshot* floater, BOOL checked)
+// {
+// 	LLPanelSnapshot* active_panel = getActivePanel(floater);
+// 	if (active_panel)
+// 	{
+// 		active_panel->getChild<LLUICtrl>(active_panel->getTempUploadCBName())->setValue(checked);
+// 	}
+// }
+// </FS:Zi>
+
+// static
+LLSnapshotLivePreview* LLFloaterSnapshot::Impl::getPreviewView(LLFloaterSnapshot *floater)
+{
+	LLSnapshotLivePreview* previewp = (LLSnapshotLivePreview*)floater->impl.mPreviewHandle.get();
+	return previewp;
+}
+
+// static
+LLViewerWindow::ESnapshotType LLFloaterSnapshot::Impl::getLayerType(LLFloaterSnapshot* floater)
+{
+	LLViewerWindow::ESnapshotType type = LLViewerWindow::SNAPSHOT_TYPE_COLOR;
+	LLSD value = floater->getChild<LLUICtrl>("layer_types")->getValue();
+	const std::string id = value.asString();
+	if (id == "colors")
+		type = LLViewerWindow::SNAPSHOT_TYPE_COLOR;
+	else if (id == "depth")
+		type = LLViewerWindow::SNAPSHOT_TYPE_DEPTH;
+	return type;
+}
+
+// static
+void LLFloaterSnapshot::Impl::setResolution(LLFloaterSnapshot* floater, const std::string& comboname)
+{
+	LLComboBox* combo = floater->getChild<LLComboBox>(comboname);
+		combo->setVisible(TRUE);
+	updateResolution(combo, floater, FALSE); // to sync spinners with combo
+}
+
+//static 
+void LLFloaterSnapshot::Impl::updateLayout(LLFloaterSnapshot* floaterp,BOOL closingFloater)
+{
+	LLSnapshotLivePreview* previewp = getPreviewView(floaterp);
+
+	BOOL advanced = gSavedSettings.getBOOL("AdvanceSnapshot");
+
+	// Show/hide advanced options.
+	LLPanel* advanced_options_panel = floaterp->getChild<LLPanel>("advanced_options_panel");
+
+	// <FS:Ansariel> Use Up/down chevrons
+	//floaterp->getChild<LLButton>("advanced_options_btn")->setImageOverlay(advanced ? "TabIcon_Open_Off" : "TabIcon_Close_Off");
+	floaterp->getChild<LLButton>("advanced_options_btn")->setImageOverlay(advanced ? "Arrow_Up" : "Arrow_Down");
+	if (advanced != advanced_options_panel->getVisible())
+	{
+		// <FS:Zi> New calculation method for advanced options at the bottom of the floater
+//		S32 panel_width = advanced_options_panel->getRect().getWidth();
+		floaterp->getChild<LLPanel>("advanced_options_panel")->setVisible(advanced);
+//		S32 floater_width = floaterp->getRect().getWidth();
+//		floater_width += (advanced ? panel_width : -panel_width);
+//		floaterp->reshape(floater_width, floaterp->getRect().getHeight());
+		S32 panel_height = advanced_options_panel->getRect().getHeight();
+		S32 floater_height = floaterp->getRect().getHeight();
+		floater_height+=(advanced) ? panel_height : -panel_height;
+		floaterp->reshape(floaterp->getRect().getWidth(),floater_height);
+		floaterp->translate(0,(advanced) ? -panel_height : panel_height);
+		// </FS:Zi>
+	}
+
+	if(!advanced) //set to original window resolution
+	{
+		previewp->mKeepAspectRatio = TRUE;
+
+		floaterp->getChild<LLComboBox>("profile_size_combo")->setCurrentByIndex(0);
+		floaterp->getChild<LLComboBox>("postcard_size_combo")->setCurrentByIndex(0);
+		floaterp->getChild<LLComboBox>("texture_size_combo")->setCurrentByIndex(0);
+		floaterp->getChild<LLComboBox>("local_size_combo")->setCurrentByIndex(0);
+
+		LLSnapshotLivePreview* previewp = getPreviewView(floaterp);
+		previewp->setSize(gViewerWindow->getWindowWidthRaw(), gViewerWindow->getWindowHeightRaw());
+	}
+
+	bool use_freeze_frame = floaterp->getChild<LLUICtrl>("freeze_frame_check")->getValue().asBoolean();
+
+	// <FS:Zi> Fix snapshot freeze frame getting stuck
+	// if (use_freeze_frame)
+	if (use_freeze_frame && !closingFloater)
+	// </FS:Zi>
+	{
+		// stop all mouse events at fullscreen preview layer
+		floaterp->getParent()->setMouseOpaque(TRUE);
+		
+		// shrink to smaller layout
+		// *TODO: unneeded?
+		floaterp->reshape(floaterp->getRect().getWidth(), floaterp->getRect().getHeight());
+
+		// can see and interact with fullscreen preview now
+		if (previewp)
+		{
+			previewp->setVisible(TRUE);
+			previewp->setEnabled(TRUE);
+		}
+
+		//RN: freeze all avatars
+		LLCharacter* avatarp;
+		for (std::vector<LLCharacter*>::iterator iter = LLCharacter::sInstances.begin();
+			iter != LLCharacter::sInstances.end(); ++iter)
+		{
+			avatarp = *iter;
+			floaterp->impl.mAvatarPauseHandles.push_back(avatarp->requestPause());
+		}
+
+		// freeze everything else
+		gSavedSettings.setBOOL("FreezeTime", TRUE);
+
+		if (LLToolMgr::getInstance()->getCurrentToolset() != gCameraToolset)
+		{
+			floaterp->impl.mLastToolset = LLToolMgr::getInstance()->getCurrentToolset();
+			LLToolMgr::getInstance()->setCurrentToolset(gCameraToolset);
+		}
+	}
+	else // turning off freeze frame mode
+	{
+		floaterp->getParent()->setMouseOpaque(FALSE);
+		// *TODO: unneeded?
+		floaterp->reshape(floaterp->getRect().getWidth(), floaterp->getRect().getHeight());
+		if (previewp)
+		{
+			previewp->setVisible(FALSE);
+			previewp->setEnabled(FALSE);
+		}
+
+		//RN: thaw all avatars
+		floaterp->impl.mAvatarPauseHandles.clear();
+
+		// thaw everything else
+		gSavedSettings.setBOOL("FreezeTime", FALSE);
+
+		// restore last tool (e.g. pie menu, etc)
+		if (floaterp->impl.mLastToolset)
+		{
+			LLToolMgr::getInstance()->setCurrentToolset(floaterp->impl.mLastToolset);
+		}
+	}
+}
+
+// This is the main function that keeps all the GUI controls in sync with the saved settings.
+// It should be called anytime a setting is changed that could affect the controls.
+// No other methods should be changing any of the controls directly except for helpers called by this method.
+// The basic pattern for programmatically changing the GUI settings is to first set the
+// appropriate saved settings and then call this method to sync the GUI with them.
+// FIXME: The above comment seems obsolete now.
+// static
+void LLFloaterSnapshot::Impl::updateControls(LLFloaterSnapshot* floater)
+{
+	LLSnapshotLivePreview::ESnapshotType shot_type = getActiveSnapshotType(floater);
+	ESnapshotFormat shot_format = (ESnapshotFormat)gSavedSettings.getS32("SnapshotFormat");
+	LLViewerWindow::ESnapshotType layer_type = getLayerType(floater);
+
+	floater->getChild<LLComboBox>("local_format_combo")->selectNthItem(gSavedSettings.getS32("SnapshotFormat"));
+	// <FS:Zi> Save all settings
+	// enableAspectRatioCheckbox(floater, !floater->impl.mAspectRatioCheckOff);
+	// setAspectRatioCheckboxValue(floater, gSavedSettings.getBOOL("KeepAspectForSnapshot"));
+	// </FS:Zi>
+	floater->getChildView("layer_types")->setEnabled(shot_type == LLSnapshotLivePreview::SNAPSHOT_LOCAL);
+
+	LLPanelSnapshot* active_panel = getActivePanel(floater);
+	if (active_panel)
+	{
+		LLSpinCtrl* width_ctrl = getWidthSpinner(floater);
+		LLSpinCtrl* height_ctrl = getHeightSpinner(floater);
+
+		// Initialize spinners.
+		if (width_ctrl->getValue().asInteger() == 0)
+		{
+			S32 w = gViewerWindow->getWindowWidthRaw();
+			LL_DEBUGS() << "Initializing width spinner (" << width_ctrl->getName() << "): " << w << LL_ENDL;
+			width_ctrl->setValue(w);
+		}
+		if (height_ctrl->getValue().asInteger() == 0)
+		{
+			S32 h = gViewerWindow->getWindowHeightRaw();
+			LL_DEBUGS() << "Initializing height spinner (" << height_ctrl->getName() << "): " << h << LL_ENDL;
+			height_ctrl->setValue(h);
+		}
+
+		// Сlamp snapshot resolution to window size when showing UI or HUD in snapshot.
+		if (gSavedSettings.getBOOL("RenderUIInSnapshot") || gSavedSettings.getBOOL("RenderHUDInSnapshot"))
+		{
+			S32 width = gViewerWindow->getWindowWidthRaw();
+			S32 height = gViewerWindow->getWindowHeightRaw();
+
+			width_ctrl->setMaxValue(width);
+
+			height_ctrl->setMaxValue(height);
+
+			if (width_ctrl->getValue().asInteger() > width)
+			{
+				width_ctrl->forceSetValue(width);
+			}
+			if (height_ctrl->getValue().asInteger() > height)
+			{
+				height_ctrl->forceSetValue(height);
+			}
+		}
+		else
+		{
+			width_ctrl->setMaxValue(6016);
+			height_ctrl->setMaxValue(6016);
+		}
+	}
+		
+	LLSnapshotLivePreview* previewp = getPreviewView(floater);
+	BOOL got_bytes = previewp && previewp->getDataSize() > 0;
+	BOOL got_snap = previewp && previewp->getSnapshotUpToDate();
+
+	// *TODO: Separate maximum size for Web images from postcards
+	LL_DEBUGS() << "Is snapshot up-to-date? " << got_snap << LL_ENDL;
+
+	LLLocale locale(LLLocale::USER_LOCALE);
+	std::string bytes_string;
+	if (got_snap)
+	{
+		LLResMgr::getInstance()->getIntegerString(bytes_string, (previewp->getDataSize()) >> 10 );
+	}
+
+	// Update displayed image resolution.
+	LLTextBox* image_res_tb = floater->getChild<LLTextBox>("image_res_text");
+	image_res_tb->setVisible(got_snap);
+	if (got_snap)
+	{
+		LLPointer<LLImageRaw> img = previewp->getEncodedImage();
+		image_res_tb->setTextArg("[WIDTH]", llformat("%d", img->getWidth()));
+		image_res_tb->setTextArg("[HEIGHT]", llformat("%d", img->getHeight()));
+	}
+
+	floater->getChild<LLUICtrl>("file_size_label")->setTextArg("[SIZE]", got_snap ? bytes_string : floater->getString("unknown"));
+	floater->getChild<LLUICtrl>("file_size_label")->setColor(
+		shot_type == LLSnapshotLivePreview::SNAPSHOT_POSTCARD 
+		&& got_bytes
+		&& previewp->getDataSize() > MAX_POSTCARD_DATASIZE ? LLUIColor(LLColor4::red) : LLUIColorTable::instance().getColor( "LabelTextColor" ));
+
+	// Update the width and height spinners based on the corresponding resolution combos. (?)
+	switch(shot_type)
+	{
+	  case LLSnapshotLivePreview::SNAPSHOT_WEB:
+		layer_type = LLViewerWindow::SNAPSHOT_TYPE_COLOR;
+		floater->getChild<LLUICtrl>("layer_types")->setValue("colors");
+		setResolution(floater, "profile_size_combo");
+		break;
+	  case LLSnapshotLivePreview::SNAPSHOT_POSTCARD:
+		layer_type = LLViewerWindow::SNAPSHOT_TYPE_COLOR;
+		floater->getChild<LLUICtrl>("layer_types")->setValue("colors");
+		setResolution(floater, "postcard_size_combo");
+		break;
+	  case LLSnapshotLivePreview::SNAPSHOT_TEXTURE:
+		layer_type = LLViewerWindow::SNAPSHOT_TYPE_COLOR;
+		floater->getChild<LLUICtrl>("layer_types")->setValue("colors");
+		setResolution(floater, "texture_size_combo");
+		break;
+	  case  LLSnapshotLivePreview::SNAPSHOT_LOCAL:
+		setResolution(floater, "local_size_combo");
+		floater->getChild<LLComboBox>("layer_types")->selectNthItem(gSavedSettings.getS32("SnapshotLayers")); // <FS:Zi> Save all settings
+		break;
+	  // <exodus>
+	  case LLSnapshotLivePreview::SNAPSHOT_FLICKR:
+		layer_type = LLViewerWindow::SNAPSHOT_TYPE_COLOR;
+		setResolution(floater, "flickr_size_combo");
+		break;
+	  // </exodus>
+	  default:
+		break;
+	}
+
+	if (previewp)
+	{
+		previewp->setSnapshotType(shot_type);
+		previewp->setSnapshotFormat(shot_format);
+		previewp->setSnapshotBufferType(layer_type);
+	}
+
+	LLPanelSnapshot* current_panel = Impl::getActivePanel(floater);
+	if (current_panel)
+	{
+		LLSD info;
+		info["have-snapshot"] = got_snap;
+		current_panel->updateControls(info);
+	}
+	LL_DEBUGS() << "finished updating controls" << LL_ENDL;
+}
+
+// static
+void LLFloaterSnapshot::Impl::setStatus(EStatus status, bool ok, const std::string& msg)
+{
+	LLFloaterSnapshot* floater = LLFloaterSnapshot::getInstance();
+	switch (status)
+	{
+	case STATUS_READY:
+		setWorking(floater, false);
+		setFinished(floater, false);
+		break;
+	case STATUS_WORKING:
+		setWorking(floater, true);
+		setFinished(floater, false);
+		break;
+	case STATUS_FINISHED:
+		setWorking(floater, false);
+		setFinished(floater, true, ok, msg);
+		break;
+	}
+
+	floater->impl.mStatus = status;
+}
+
+// static
+void LLFloaterSnapshot::Impl::setNeedRefresh(LLFloaterSnapshot* floater, bool need)
+{
+	if (!floater) return;
+
+	// Don't display the "Refresh to save" message if we're in auto-refresh mode.
+	if (gSavedSettings.getBOOL("AutoSnapshot"))
+	{
+		need = false;
+	}
+
+	floater->mRefreshLabel->setVisible(need);
+	floater->impl.mNeedRefresh = need;
+}
+
+// static
+void LLFloaterSnapshot::Impl::checkAutoSnapshot(LLSnapshotLivePreview* previewp, BOOL update_thumbnail)
+{
+	if (previewp)
+	{
+		BOOL autosnap = gSavedSettings.getBOOL("AutoSnapshot");
+		LL_DEBUGS() << "updating " << (autosnap ? "snapshot" : "thumbnail") << LL_ENDL;
+		previewp->updateSnapshot(autosnap, update_thumbnail, autosnap ? AUTO_SNAPSHOT_TIME_DELAY : 0.f);
+	}
+}
+
+// static
+void LLFloaterSnapshot::Impl::onClickNewSnapshot(void* data)
+{
+	LLSnapshotLivePreview* previewp = getPreviewView((LLFloaterSnapshot *)data);
+	LLFloaterSnapshot *view = (LLFloaterSnapshot *)data;
+	if (previewp && view)
+	{
+		view->impl.setStatus(Impl::STATUS_READY);
+		LL_DEBUGS() << "updating snapshot" << LL_ENDL;
+		previewp->updateSnapshot(TRUE);
+	}
+}
+
+// static
+void LLFloaterSnapshot::Impl::onClickAutoSnap(LLUICtrl *ctrl, void* data)
+{
+	// <FS:Zi> Save all settings
+	// LLCheckBoxCtrl *check = (LLCheckBoxCtrl *)ctrl;
+	// gSavedSettings.setBOOL( "AutoSnapshot", check->get() );
+	// </FS:Zi>
+	
+	LLFloaterSnapshot *view = (LLFloaterSnapshot *)data;		
+	if (view)
+	{
+		checkAutoSnapshot(getPreviewView(view));
+		updateControls(view);
+	}
+}
+
+void LLFloaterSnapshot::Impl::onClickMore(void* data)
+{
+	BOOL visible = gSavedSettings.getBOOL("AdvanceSnapshot");
+	
+	LLFloaterSnapshot *view = (LLFloaterSnapshot *)data;
+	if (view)
+	{
+		view->impl.setStatus(Impl::STATUS_READY);
+		gSavedSettings.setBOOL("AdvanceSnapshot", !visible);
+		updateControls(view) ;
+		updateLayout(view) ;
+	}
+}
+
+// static
+void LLFloaterSnapshot::Impl::onClickUICheck(LLUICtrl *ctrl, void* data)
+{
+	// <FS:Zi> Save all settings
+	// LLCheckBoxCtrl *check = (LLCheckBoxCtrl *)ctrl;
+	// gSavedSettings.setBOOL( "RenderUIInSnapshot", check->get() );
+	// </FS:Zi>
+	
+	LLFloaterSnapshot *view = (LLFloaterSnapshot *)data;
+	if (view)
+	{
+		checkAutoSnapshot(getPreviewView(view), TRUE);
+		updateControls(view);
+	}
+}
+
+// static
+void LLFloaterSnapshot::Impl::onClickHUDCheck(LLUICtrl *ctrl, void* data)
+{
+	// <FS:Zi> Save all settings
+	// LLCheckBoxCtrl *check = (LLCheckBoxCtrl *)ctrl;
+	// gSavedSettings.setBOOL( "RenderHUDInSnapshot", check->get() );
+	// </FS:Zi>
+	
+	LLFloaterSnapshot *view = (LLFloaterSnapshot *)data;
+	if (view)
+	{
+		checkAutoSnapshot(getPreviewView(view), TRUE);
+		updateControls(view);
+	}
+}
+
+// static
+void LLFloaterSnapshot::Impl::applyKeepAspectCheck(LLFloaterSnapshot* view, BOOL checked)
+{
+	// gSavedSettings.setBOOL("KeepAspectForSnapshot", checked);	// <FS:Zi> Save all settings
+
+	if (view)
+	{
+		LLSnapshotLivePreview* previewp = getPreviewView(view) ;
+		if(previewp)
+		{
+			// <FS:Zi> Save all settings
+			// previewp->mKeepAspectRatio = gSavedSettings.getBOOL("KeepAspectForSnapshot") ;
+			previewp->mKeepAspectRatio = checked;
+			// </FS:Zi>
+
+			S32 w, h ;
+			previewp->getSize(w, h) ;
+			updateSpinners(view, previewp, w, h, TRUE); // may change w and h
+
+			LL_DEBUGS() << "updating thumbnail" << LL_ENDL;
+			previewp->setSize(w, h) ;
+			previewp->updateSnapshot(FALSE, TRUE);
+			checkAutoSnapshot(previewp, TRUE);
+		}
+	}
+}
+
+// static
+void LLFloaterSnapshot::Impl::onCommitFreezeFrame(LLUICtrl* ctrl, void* data)
+{
+	LLCheckBoxCtrl* check_box = (LLCheckBoxCtrl*)ctrl;
+	LLFloaterSnapshot *view = (LLFloaterSnapshot *)data;
+		
+	if (!view || !check_box)
+	{
+		return;
+	}
+
+	// gSavedSettings.setBOOL("UseFreezeFrame", check_box->get());	// <FS:Zi> Save all settings
+
+	updateLayout(view);
+}
+
+// static
+void LLFloaterSnapshot::Impl::checkAspectRatio(LLFloaterSnapshot *view, S32 index)
+{
+	LLSnapshotLivePreview *previewp = getPreviewView(view) ;
+
+	// Don't round texture sizes; textures are commonly stretched in world, profiles, etc and need to be "squashed" during upload, not cropped here
+	if(LLSnapshotLivePreview::SNAPSHOT_TEXTURE == getActiveSnapshotType(view))
+	{
+		previewp->mKeepAspectRatio = FALSE ;
+		return ;
+	}
+
+	// BOOL keep_aspect = FALSE, enable_cb = FALSE;	// <FS:Zi> Save all settings
+	BOOL keep_aspect = FALSE;
+
+	if (0 == index) // current window size
+	{
+		// enable_cb = FALSE;	// <FS:Zi> Save all settings
+		keep_aspect = TRUE;
+	}
+	else if (-1 == index) // custom
+	{
+		// <FS:Zi> Save all settings
+		// enable_cb = TRUE;
+		// keep_aspect = gSavedSettings.getBOOL("KeepAspectForSnapshot");
+		// </FS:Zi>
+		keep_aspect = previewp->mKeepAspectRatio;
+	}
+	else // predefined resolution
+	{
+		// enable_cb = FALSE;	// <FS:Zi> Save all settings
+		keep_aspect = FALSE;
+	}
+
+	// <FS:Zi> Save all settings
+	// view->impl.mAspectRatioCheckOff = !enable_cb;
+	// enableAspectRatioCheckbox(view, enable_cb);
+	// </FS:Zi>
+	if (previewp)
+	{
+		previewp->mKeepAspectRatio = keep_aspect;
+	}
+}
+
+// Show/hide upload progress indicators.
+// static
+void LLFloaterSnapshot::Impl::setWorking(LLFloaterSnapshot* floater, bool working)
+{
+	LLUICtrl* working_lbl = floater->getChild<LLUICtrl>("working_lbl");
+	working_lbl->setVisible(working);
+	floater->getChild<LLUICtrl>("working_indicator")->setVisible(working);
+
+	if (working)
+	{
+		const std::string panel_name = getActivePanel(floater, false)->getName();
+		const std::string prefix = panel_name.substr(std::string("panel_snapshot_").size());
+		std::string progress_text = floater->getString(prefix + "_" + "progress_str");
+		working_lbl->setValue(progress_text);
+	}
+
+	// All controls should be disabled while posting.
+	floater->setCtrlsEnabled(!working);
+	LLPanelSnapshot* active_panel = getActivePanel(floater);
+	if (active_panel)
+	{
+		active_panel->enableControls(!working);
+	}
+}
+
+// Show/hide upload status message.
+// static
+void LLFloaterSnapshot::Impl::setFinished(LLFloaterSnapshot* floater, bool finished, bool ok, const std::string& msg)
+{
+	floater->mSucceessLblPanel->setVisible(finished && ok);
+	floater->mFailureLblPanel->setVisible(finished && !ok);
+
+	if (finished)
+	{
+		LLUICtrl* finished_lbl = floater->getChild<LLUICtrl>(ok ? "succeeded_lbl" : "failed_lbl");
+		std::string result_text = floater->getString(msg + "_" + (ok ? "succeeded_str" : "failed_str"));
+		finished_lbl->setValue(result_text);
+
+		LLSideTrayPanelContainer* panel_container = floater->getChild<LLSideTrayPanelContainer>("panel_container");
+		panel_container->openPreviousPanel();
+		panel_container->getCurrentPanel()->onOpen(LLSD());
+	}
+}
+
+// Apply a new resolution selected from the given combobox.
+// static
+void LLFloaterSnapshot::Impl::updateResolution(LLUICtrl* ctrl, void* data, BOOL do_update)
+{
+	LLComboBox* combobox = (LLComboBox*)ctrl;
+	LLFloaterSnapshot *view = (LLFloaterSnapshot *)data;
+		
+	if (!view || !combobox)
+	{
+		llassert(view && combobox);
+		return;
+	}
+
+	// <FS:Zi> Save all settings
+	// Since combo boxes don't save their control variable for some reason, we
+	// do that here manually.
+	S32 currentResolution=combobox->getFirstSelectedIndex();
+	if(currentResolution>=0)
+	{
+		gSavedSettings.setS32(getActivePanel(view)->getImageSizeControlName(),currentResolution);
+	}
+	// </FS:Zi>
+
+	std::string sdstring = combobox->getSelectedValue();
+	LLSD sdres;
+	std::stringstream sstream(sdstring);
+	LLSDSerialize::fromNotation(sdres, sstream, sdstring.size());
+		
+	S32 width = sdres[0];
+	S32 height = sdres[1];
+	
+	LLSnapshotLivePreview* previewp = getPreviewView(view);
+	if (previewp && combobox->getCurrentIndex() >= 0)
+	{
+		S32 original_width = 0 , original_height = 0 ;
+		previewp->getSize(original_width, original_height) ;
+		
+		// <FS:Zi> Save all settings
+		// if (width == 0 || height == 0)
+		previewp->mKeepAspectRatio=FALSE;
+		if(currentResolution==0)	// Current Window Size
+		// </FS:Zi>
+		{
+			// take resolution from current window size
+			LL_DEBUGS() << "Setting preview res from window: " << gViewerWindow->getWindowWidthRaw() << "x" << gViewerWindow->getWindowHeightRaw() << LL_ENDL;
+			previewp->setSize(gViewerWindow->getWindowWidthRaw(), gViewerWindow->getWindowHeightRaw());
+		}
+		// <FS:Zi> Save all settings
+		// else if (width == -1 || height == -1)
+		else if(currentResolution==combobox->getItemCount()-1)	// Custom Size is always the last item in the drop-down
+		// </FS:Zi>
+		{
+			// load last custom value
+			S32 new_width = 0, new_height = 0;
+			LLPanelSnapshot* spanel = getActivePanel(view);
+			if (spanel)
+			{
+				LL_DEBUGS() << "Loading typed res from panel " << spanel->getName() << LL_ENDL;
+				new_width = spanel->getTypedPreviewWidth();
+				new_height = spanel->getTypedPreviewHeight();
+
+				// Limit custom size for inventory snapshots to 512x512 px.
+				if (getActiveSnapshotType(view) == LLSnapshotLivePreview::SNAPSHOT_TEXTURE)
+				{
+					new_width = llmin(new_width, MAX_TEXTURE_SIZE);
+					new_height = llmin(new_height, MAX_TEXTURE_SIZE);
+				}
+				// <FS:Zi> Save all settings
+				else
+				{
+					previewp->mKeepAspectRatio=spanel->getChild<LLCheckBoxCtrl>(spanel->getAspectRatioCBName())->getValue();
+				}
+				// </FS:Zi>
+			}
+			else
+			{
+				LL_DEBUGS() << "No custom res chosen, setting preview res from window: "
+					<< gViewerWindow->getWindowWidthRaw() << "x" << gViewerWindow->getWindowHeightRaw() << LL_ENDL;
+				new_width = gViewerWindow->getWindowWidthRaw();
+				new_height = gViewerWindow->getWindowHeightRaw();
+			}
+
+			llassert(new_width > 0 && new_height > 0);
+			previewp->setSize(new_width, new_height);
+		}
+		else
+		{
+			// use the resolution from the selected pre-canned drop-down choice
+			LL_DEBUGS() << "Setting preview res selected from combo: " << width << "x" << height << LL_ENDL;
+			previewp->setSize(width, height);
+		}
+
+		// checkAspectRatio(view, width) ;	// <FS:Zi> Save all settings
+
+		previewp->getSize(width, height);
+	
+		if (gSavedSettings.getBOOL("RenderUIInSnapshot") || gSavedSettings.getBOOL("RenderHUDInSnapshot"))
+		{ //clamp snapshot resolution to window size when showing UI or HUD in snapshot
+			width = llmin(width, gViewerWindow->getWindowWidthRaw());
+			height = llmin(height, gViewerWindow->getWindowHeightRaw());
+		}
+
+		// <FS:Zi> Save all settings
+		// updateSpinners(view, previewp, width, height, TRUE); // may change width and height
+		
+		// if(getWidthSpinner(view)->getValue().asInteger() != width || getHeightSpinner(view)->getValue().asInteger() != height)
+		// {
+		// 	getWidthSpinner(view)->setValue(width);
+		// 	getHeightSpinner(view)->setValue(height);
+		// }
+		// </FS:Zi>
+
+		if(original_width != width || original_height != height)
+		{
+			previewp->setSize(width, height);
+
+			// hide old preview as the aspect ratio could be wrong
+			checkAutoSnapshot(previewp, FALSE);
+			LL_DEBUGS() << "updating thumbnail" << LL_ENDL;
+			getPreviewView(view)->updateSnapshot(FALSE, TRUE);
+			if(do_update)
+			{
+				LL_DEBUGS() << "Will update controls" << LL_ENDL;
+				updateControls(view);
+				setNeedRefresh(view, true);
+			}
+		}
+	}
+}
+
+// static
+void LLFloaterSnapshot::Impl::onCommitLayerTypes(LLUICtrl* ctrl, void*data)
+{
+	LLComboBox* combobox = (LLComboBox*)ctrl;
+
+	LLFloaterSnapshot *view = (LLFloaterSnapshot *)data;
+	gSavedSettings.setS32("SnapshotLayers",combobox->getFirstSelectedIndex()); // <FS:Zi> Save all settings
+	if (view)
+	{
+		LLSnapshotLivePreview* previewp = getPreviewView(view);
+		if (previewp)
+		{
+			previewp->setSnapshotBufferType((LLViewerWindow::ESnapshotType)combobox->getCurrentIndex());
+		}
+		checkAutoSnapshot(previewp, TRUE);
+	}
+}
+
+// static
+void LLFloaterSnapshot::Impl::onImageQualityChange(LLFloaterSnapshot* view, S32 quality_val)
+{
+	LLSnapshotLivePreview* previewp = getPreviewView(view);
+	if (previewp)
+	{
+		previewp->setSnapshotQuality(quality_val);
+	}
+	checkAutoSnapshot(previewp, TRUE);
+}
+
+// static
+void LLFloaterSnapshot::Impl::onImageFormatChange(LLFloaterSnapshot* view)
+{
+	if (view)
+	{
+		gSavedSettings.setS32("SnapshotFormat",getActivePanel(view)->getImageFormat());	// <FS:Zi> Save all settings
+		LL_DEBUGS() << "image format changed, updating snapshot" << LL_ENDL;
+		getPreviewView(view)->updateSnapshot(TRUE);
+		updateControls(view);
+		setNeedRefresh(view, false); // we're refreshing
+	}
+}
+
+// <FS:Zi> Save all settings
+// Sets the named size combo to "custom" mode.
+// static
+// void LLFloaterSnapshot::Impl::comboSetCustom(LLFloaterSnapshot* floater, const std::string& comboname)
+// {
+// 	LLComboBox* combo = floater->getChild<LLComboBox>(comboname);
+// 	combo->setCurrentByIndex(combo->getItemCount() - 1); // "custom" is always the last index
+// 	checkAspectRatio(floater, -1); // -1 means custom
+// }
+// </FS:Zi>
+
+// Update supplied width and height according to the constrain proportions flag; limit them by max_val.
+//static
+BOOL LLFloaterSnapshot::Impl::checkImageSize(LLSnapshotLivePreview* previewp, S32& width, S32& height, BOOL isWidthChanged, S32 max_value)
+{
+	S32 w = width ;
+	S32 h = height ;
+
+	if(previewp && previewp->mKeepAspectRatio)
+	{
+		if(gViewerWindow->getWindowWidthRaw() < 1 || gViewerWindow->getWindowHeightRaw() < 1)
+		{
+			return FALSE ;
+		}
+
+		//aspect ratio of the current window
+		F32 aspect_ratio = (F32)gViewerWindow->getWindowWidthRaw() / gViewerWindow->getWindowHeightRaw() ;
+
+		//change another value proportionally
+		if(isWidthChanged)
+		{
+			height = llround(width / aspect_ratio) ;
+		}
+		else
+		{
+			width = llround(height * aspect_ratio) ;
+		}
+
+		//bound w/h by the max_value
+		if(width > max_value || height > max_value)
+		{
+			if(width > height)
+			{
+				width = max_value ;
+				height = (S32)(width / aspect_ratio) ;
+			}
+			else
+			{
+				height = max_value ;
+				width = (S32)(height * aspect_ratio) ;
+			}
+		}
+	}
+
+	return (w != width || h != height) ;
+}
+
+//static
+void LLFloaterSnapshot::Impl::setImageSizeSpinnersValues(LLFloaterSnapshot *view, S32 width, S32 height)
+{
+	getWidthSpinner(view)->forceSetValue(width);
+	getHeightSpinner(view)->forceSetValue(height);
+}
+
+// static
+void LLFloaterSnapshot::Impl::updateSpinners(LLFloaterSnapshot* view, LLSnapshotLivePreview* previewp, S32& width, S32& height, BOOL is_width_changed)
+{
+	if (checkImageSize(previewp, width, height, is_width_changed, previewp->getMaxImageSize()))
+	{
+		setImageSizeSpinnersValues(view, width, height);
+	}
+}
+
+// static
+void LLFloaterSnapshot::Impl::applyCustomResolution(LLFloaterSnapshot* view, S32 w, S32 h)
+{
+	bool need_refresh = false;
+
+	LL_DEBUGS() << "applyCustomResolution(" << w << ", " << h << ")" << LL_ENDL;
+	if (!view) return;
+
+	LLSnapshotLivePreview* previewp = getPreviewView(view);
+	if (previewp)
+	{
+		S32 curw,curh;
+		previewp->getSize(curw, curh);
+
+		if (w != curw || h != curh)
+		{
+			//if to upload a snapshot, process spinner input in a special way.
+			previewp->setMaxImageSize((S32) getWidthSpinner(view)->getMaxValue()) ;
+
+			updateSpinners(view, previewp, w, h, w != curw); // may change w and h
+
+			previewp->setSize(w,h);
+			checkAutoSnapshot(previewp, FALSE);
+			LL_DEBUGS() << "applied custom resolution, updating thumbnail" << LL_ENDL;
+			previewp->updateSnapshot(FALSE, TRUE);
+			// <FS:Zi> Save all settings
+			// comboSetCustom(view, "profile_size_combo");
+			// comboSetCustom(view, "postcard_size_combo");
+			// comboSetCustom(view, "texture_size_combo");
+			// comboSetCustom(view, "local_size_combo");
+			// </FS:Zi>
+			need_refresh = true;
+		}
+	}
+
+	updateControls(view);
+	if (need_refresh)
+	{
+		setNeedRefresh(view, true); // need to do this after updateControls()
+	}
+}
+
+// static
+void LLFloaterSnapshot::Impl::onSnapshotUploadFinished(bool status)
+{
+	setStatus(STATUS_FINISHED, status, "profile");
+}
+
+
+// static
+void LLFloaterSnapshot::Impl::onSendingPostcardFinished(bool status)
+{
+	setStatus(STATUS_FINISHED, status, "postcard");
+}
+
+///----------------------------------------------------------------------------
+/// Class LLFloaterSnapshot
+///----------------------------------------------------------------------------
+
+// Default constructor
+LLFloaterSnapshot::LLFloaterSnapshot(const LLSD& key)
+	: LLFloater(key),
+	  mRefreshBtn(NULL),
+	  mRefreshLabel(NULL),
+	  mSucceessLblPanel(NULL),
+	  mFailureLblPanel(NULL),
+	  impl (*(new Impl))
+{
+	// <FS:Zi> Add a commit handler to react on switching snapshot destination tab pages
+	mCommitCallbackRegistrar.add("Snapshot.SelectDestination",boost::bind(&LLFloaterSnapshot::onSelectDestination,this));
+	// </FS:Zi>
+}
+
+// Destroys the object
+LLFloaterSnapshot::~LLFloaterSnapshot()
+{
+	if (impl.mPreviewHandle.get()) impl.mPreviewHandle.get()->die();
+
+	//unfreeze everything else
+	gSavedSettings.setBOOL("FreezeTime", FALSE);
+
+	if (impl.mLastToolset)
+	{
+		LLToolMgr::getInstance()->setCurrentToolset(impl.mLastToolset);
+	}
+
+	delete &impl;
+}
+
+
+BOOL LLFloaterSnapshot::postBuild()
+{
+	mRefreshBtn = getChild<LLUICtrl>("new_snapshot_btn");
+	childSetAction("new_snapshot_btn", Impl::onClickNewSnapshot, this);
+	mRefreshLabel = getChild<LLUICtrl>("refresh_lbl");
+	mSucceessLblPanel = getChild<LLUICtrl>("succeeded_panel");
+	mFailureLblPanel = getChild<LLUICtrl>("failed_panel");
+
+	childSetAction("advanced_options_btn", Impl::onClickMore, this);
+
+	childSetCommitCallback("ui_check", Impl::onClickUICheck, this);
+	// getChild<LLUICtrl>("ui_check")->setValue(gSavedSettings.getBOOL("RenderUIInSnapshot"));	// <FS:Zi> Save all settings
+
+	childSetCommitCallback("hud_check", Impl::onClickHUDCheck, this);
+	// getChild<LLUICtrl>("hud_check")->setValue(gSavedSettings.getBOOL("RenderHUDInSnapshot"));	// <FS:Zi> Save all settings
+
+	// impl.setAspectRatioCheckboxValue(this, gSavedSettings.getBOOL("KeepAspectForSnapshot"));	// <FS:Zi> Save all settings
+
+	childSetCommitCallback("layer_types", Impl::onCommitLayerTypes, this);
+	// getChild<LLUICtrl>("layer_types")->setValue("colors");	// <FS:Zi> Save all settings
+	getChildView("layer_types")->setEnabled(FALSE);
+
+	// getChild<LLUICtrl>("freeze_frame_check")->setValue(gSavedSettings.getBOOL("UseFreezeFrame"));	// <FS:Zi> Save all settings
+	childSetCommitCallback("freeze_frame_check", Impl::onCommitFreezeFrame, this);
+
+	// getChild<LLUICtrl>("auto_snapshot_check")->setValue(gSavedSettings.getBOOL("AutoSnapshot"));	// <FS:Zi> Save all settings
+	childSetCommitCallback("auto_snapshot_check", Impl::onClickAutoSnap, this);
+	
+	LLWebProfile::setImageUploadResultCallback(boost::bind(&LLFloaterSnapshot::Impl::onSnapshotUploadFinished, _1));
+	LLPostCard::setPostResultCallback(boost::bind(&LLFloaterSnapshot::Impl::onSendingPostcardFinished, _1));
+
+	sThumbnailPlaceholder = getChild<LLUICtrl>("thumbnail_placeholder");
+
+	// create preview window
+	LLRect full_screen_rect = getRootView()->getRect();
+	LLSnapshotLivePreview::Params p;
+	p.rect(full_screen_rect);
+	LLSnapshotLivePreview* previewp = new LLSnapshotLivePreview(p);
+	LLView* parent_view = gSnapshotFloaterView->getParent();
+	
+	parent_view->removeChild(gSnapshotFloaterView);
+	// make sure preview is below snapshot floater
+	parent_view->addChild(previewp);
+	parent_view->addChild(gSnapshotFloaterView);
+	
+	//move snapshot floater to special purpose snapshotfloaterview
+	gFloaterView->removeChild(this);
+	gSnapshotFloaterView->addChild(this);
+
+	// <FS:Zi> Save all settings
+	// // Pre-select "Current Window" resolution.
+	// getChild<LLComboBox>("profile_size_combo")->selectNthItem(0);
+	// getChild<LLComboBox>("postcard_size_combo")->selectNthItem(0);
+	// getChild<LLComboBox>("texture_size_combo")->selectNthItem(0);
+	// getChild<LLComboBox>("local_size_combo")->selectNthItem(0);
+	// getChild<LLComboBox>("local_format_combo")->selectNthItem(0);
+
+	// Since combo boxes don't restore their control variable for some reason, we
+	// do that here manually.
+	getChild<LLComboBox>("profile_size_combo")->selectNthItem(gSavedSettings.getS32("LastSnapshotToProfileResolution"));
+	getChild<LLComboBox>("postcard_size_combo")->selectNthItem(gSavedSettings.getS32("LastSnapshotToEmailResolution"));
+	getChild<LLComboBox>("texture_size_combo")->selectNthItem(gSavedSettings.getS32("LastSnapshotToInventoryResolution"));
+	getChild<LLComboBox>("local_size_combo")->selectNthItem(gSavedSettings.getS32("LastSnapshotToDiskResolution"));
+	getChild<LLComboBox>("local_format_combo")->selectNthItem(gSavedSettings.getS32("SnapshotFormat"));
+	getChild<LLComboBox>("layer_types")->selectNthItem(gSavedSettings.getS32("SnapshotLayers"));
+	getChild<LLComboBox>("flickr_size_combo")->selectNthItem(gSavedSettings.getS32("LastSnapshotToFlickrResolution"));
+	getChild<LLComboBox>("flickr_format_combo")->selectNthItem(gSavedSettings.getS32("FlickrSnapshotFormat"));
+	// </FS:Zi>
+
+	impl.mPreviewHandle = previewp->getHandle();
+	impl.updateControls(this);
+	impl.updateLayout(this);
+	
+
+	previewp->setThumbnailPlaceholderRect(getThumbnailPlaceholderRect());
+
+	return TRUE;
+}
+
+void LLFloaterSnapshot::draw()
+{
+	LLSnapshotLivePreview* previewp = impl.getPreviewView(this);
+
+	if (previewp && (previewp->isSnapshotActive() || previewp->getThumbnailLock()))
+	{
+		// don't render snapshot window in snapshot, even if "show ui" is turned on
+		return;
+	}
+
+	LLFloater::draw();
+
+	if (previewp && !isMinimized())
+	{		
+		if(previewp->getThumbnailImage())
+		{
+			bool working = impl.getStatus() == Impl::STATUS_WORKING;
+			const LLRect& thumbnail_rect = getThumbnailPlaceholderRect();
+			const S32 thumbnail_w = previewp->getThumbnailWidth();
+			const S32 thumbnail_h = previewp->getThumbnailHeight();
+
+			// calc preview offset within the preview rect
+			const S32 local_offset_x = (thumbnail_rect.getWidth() - thumbnail_w) / 2 ;
+			const S32 local_offset_y = (thumbnail_rect.getHeight() - thumbnail_h) / 2 ; // preview y pos within the preview rect
+
+			// calc preview offset within the floater rect
+			S32 offset_x = thumbnail_rect.mLeft + local_offset_x;
+			S32 offset_y = thumbnail_rect.mBottom + local_offset_y;
+
+			gGL.matrixMode(LLRender::MM_MODELVIEW);
+			// Apply floater transparency to the texture unless the floater is focused.
+			F32 alpha = getTransparencyType() == TT_ACTIVE ? 1.0f : getCurrentTransparency();
+			LLColor4 color = working ? LLColor4::grey4 : LLColor4::white;
+			gl_draw_scaled_image(offset_x, offset_y, 
+					thumbnail_w, thumbnail_h,
+					previewp->getThumbnailImage(), color % alpha);
+
+			previewp->drawPreviewRect(offset_x, offset_y) ;
+
+			// Draw some controls on top of the preview thumbnail.
+			static const S32 PADDING = 5;
+			static const S32 REFRESH_LBL_BG_HEIGHT = 32;
+
+			// Reshape and position the posting result message panels at the top of the thumbnail.
+			// Do this regardless of current posting status (finished or not) to avoid flicker
+			// when the result message is displayed for the first time.
+			// if (impl.getStatus() == Impl::STATUS_FINISHED)
+			{
+				LLRect result_lbl_rect = mSucceessLblPanel->getRect();
+				const S32 result_lbl_h = result_lbl_rect.getHeight();
+				result_lbl_rect.setLeftTopAndSize(local_offset_x, local_offset_y + thumbnail_h, thumbnail_w - 1, result_lbl_h);
+				mSucceessLblPanel->reshape(result_lbl_rect.getWidth(), result_lbl_h);
+				mSucceessLblPanel->setRect(result_lbl_rect);
+				mFailureLblPanel->reshape(result_lbl_rect.getWidth(), result_lbl_h);
+				mFailureLblPanel->setRect(result_lbl_rect);
+			}
+
+			// Position the refresh button in the bottom left corner of the thumbnail.
+			mRefreshBtn->setOrigin(local_offset_x + PADDING, local_offset_y + PADDING);
+
+			if (impl.mNeedRefresh)
+			{
+				// Place the refresh hint text to the right of the refresh button.
+				const LLRect& refresh_btn_rect = mRefreshBtn->getRect();
+				mRefreshLabel->setOrigin(refresh_btn_rect.mLeft + refresh_btn_rect.getWidth() + PADDING, refresh_btn_rect.mBottom);
+
+				// Draw the refresh hint background.
+				LLRect refresh_label_bg_rect(offset_x, offset_y + REFRESH_LBL_BG_HEIGHT, offset_x + thumbnail_w - 1, offset_y);
+				gl_rect_2d(refresh_label_bg_rect, LLColor4::white % 0.9f, TRUE);
+			}
+
+			gGL.pushUIMatrix();
+			LLUI::translate((F32) thumbnail_rect.mLeft, (F32) thumbnail_rect.mBottom);
+			sThumbnailPlaceholder->draw();
+			gGL.popUIMatrix();
+		}
+	}
+}
+
+void LLFloaterSnapshot::onOpen(const LLSD& key)
+{
+	// <FS:HG> FIRE-5811 Save Last Snapshot Tab 
+	LLTabContainer* tabcontainer = getChild<LLTabContainer>("panel_tab_container");
+	if (!tabcontainer->selectTab(gSavedSettings.getS32("LastSnapShotTab")))
+	{
+		tabcontainer->selectFirstTab();
+	}
+	// </FS:HG> FIRE-5811 Save Last Snapshot Tab
+	// <FS:CR> FIRE-9621	
+#ifdef OPENSIM
+	if (LLGridManager::getInstance()->isInOpenSim())
+	{
+		if (tabcontainer)
+		{
+			LL_INFOS() << "Found tab container" << LL_ENDL;
+			LLPanel* panel_snapshot_profile = tabcontainer->getPanelByName("panel_snapshot_profile");
+			if (panel_snapshot_profile)
+			{
+				LL_INFOS() << "Found panel tab" << LL_ENDL;
+				tabcontainer->removeTabPanel(panel_snapshot_profile);
+			}
+		}
+	}
+#endif // OPENSIM
+	// </FS:CR>
+
+	LLSnapshotLivePreview* preview = LLFloaterSnapshot::Impl::getPreviewView(this);
+	if(preview)
+	{
+		LL_DEBUGS() << "opened, updating snapshot" << LL_ENDL;
+		preview->updateSnapshot(TRUE);
+	}
+	focusFirstItem(FALSE);
+	gSnapshotFloaterView->setEnabled(TRUE);
+	gSnapshotFloaterView->setVisible(TRUE);
+	gSnapshotFloaterView->adjustToFitScreen(this, FALSE);
+// <FS:CR> FIRE-9613 - Hide temp uploads on SSB enabled regions
+	if (gAgent.getRegion()->getCentralBakeVersion() == 0)
+		getChild<LLCheckBoxCtrl>("inventory_temp_upload")->setVisible(TRUE);
+// </FS:CR>
+
+
+	// <FS:HG> FIRE-5811 Save Last Snapshot Tab 
+	// // Initialize default tab.
+	// getChild<LLSideTrayPanelContainer>("panel_container")->getCurrentPanel()->onOpen(LLSD());
+	// </FS:HG>
+}
+
+void LLFloaterSnapshot::onClose(bool app_quitting)
+{
+	// <FS:HG> FIRE-5811 Save Last Snapshot Tab 
+	gSavedSettings.setS32("LastSnapShotTab", getChild<LLTabContainer>("panel_tab_container")->getCurrentPanelIndex());
+	// </FS:HG>
+	getParent()->setMouseOpaque(FALSE);
+	LLFloaterSnapshot::Impl::updateLayout(this,TRUE);	// <FS:Zi> Fix snapshot freeze frame getting stuck
+}
+
+// virtual
+S32 LLFloaterSnapshot::notify(const LLSD& info)
+{
+	// A child panel wants to change snapshot resolution.
+	if (info.has("combo-res-change"))
+	{
+		std::string combo_name = info["combo-res-change"]["control-name"].asString();
+		impl.updateResolution(getChild<LLUICtrl>(combo_name), this);
+		return 1;
+	}
+
+	if (info.has("custom-res-change"))
+	{
+		LLSD res = info["custom-res-change"];
+		impl.applyCustomResolution(this, res["w"].asInteger(), res["h"].asInteger());
+		return 1;
+	}
+
+	if (info.has("keep-aspect-change"))
+	{
+		impl.applyKeepAspectCheck(this, info["keep-aspect-change"].asBoolean());
+		return 1;
+	}
+
+	if (info.has("image-quality-change"))
+	{
+		impl.onImageQualityChange(this, info["image-quality-change"].asInteger());
+		return 1;
+	}
+
+	if (info.has("image-format-change"))
+	{
+		impl.onImageFormatChange(this);
+		return 1;
+	}
+
+	if (info.has("set-ready"))
+	{
+		impl.setStatus(Impl::STATUS_READY);
+		return 1;
+	}
+
+	if (info.has("set-working"))
+	{
+		impl.setStatus(Impl::STATUS_WORKING);
+		return 1;
+	}
+
+	if (info.has("set-finished"))
+	{
+		LLSD data = info["set-finished"];
+		impl.setStatus(Impl::STATUS_FINISHED, data["ok"].asBoolean(), data["msg"].asString());
+		return 1;
+	}
+
+	// <FS:Zi> Save all settings
+	//FS:LO Fire-6268 [Regression] Temp upload for snapshots missing after FUI merge.
+	// if (info.has("temp-upload-change"))
+	// {
+	// 	impl.applyTempUploadCheck(this, info["temp-upload-change"].asBoolean());
+	// 	return 1;
+	// }
+	// </FS:Zi>
+	return 0;
+}
+
+//static 
+void LLFloaterSnapshot::update()
+{
+	LLFloaterSnapshot* inst = findInstance();
+	LLFloaterSocial* floater_social  = LLFloaterReg::findTypedInstance<LLFloaterSocial>("social"); 
+
+	if (!inst && !floater_social)
+		return;
+	
+	BOOL changed = FALSE;
+	LL_DEBUGS() << "npreviews: " << LLSnapshotLivePreview::sList.size() << LL_ENDL;
+	for (std::set<LLSnapshotLivePreview*>::iterator iter = LLSnapshotLivePreview::sList.begin();
+		 iter != LLSnapshotLivePreview::sList.end(); ++iter)
+	{
+		changed |= LLSnapshotLivePreview::onIdle(*iter);
+	}
+    
+	if (inst && changed)
+	{
+		LL_DEBUGS() << "changed" << LL_ENDL;
+		inst->impl.updateControls(inst);
+	}
+}
+
+// static
+LLFloaterSnapshot* LLFloaterSnapshot::getInstance()
+{
+	return LLFloaterReg::getTypedInstance<LLFloaterSnapshot>("snapshot");
+}
+
+// static
+LLFloaterSnapshot* LLFloaterSnapshot::findInstance()
+{
+	return LLFloaterReg::findTypedInstance<LLFloaterSnapshot>("snapshot");
+}
+
+// static
+void LLFloaterSnapshot::saveTexture()
+{
+	LL_DEBUGS() << "saveTexture" << LL_ENDL;
+
+	// FIXME: duplicated code
+	LLFloaterSnapshot* instance = findInstance();
+	if (!instance)
+	{
+		llassert(instance != NULL);
+		return;
+	}
+	LLSnapshotLivePreview* previewp = Impl::getPreviewView(instance);
+	if (!previewp)
+	{
+		llassert(previewp != NULL);
+		return;
+	}
+
+	previewp->saveTexture();
+}
+
+// static
+BOOL LLFloaterSnapshot::saveLocal()
+{
+	LL_DEBUGS() << "saveLocal" << LL_ENDL;
+	// FIXME: duplicated code
+	LLFloaterSnapshot* instance = findInstance();
+	if (!instance)
+	{
+		llassert(instance != NULL);
+		return FALSE;
+	}
+	LLSnapshotLivePreview* previewp = Impl::getPreviewView(instance);
+	if (!previewp)
+	{
+		llassert(previewp != NULL);
+		return FALSE;
+	}
+
+	return previewp->saveLocal();
+}
+
+// static
+void LLFloaterSnapshot::preUpdate()
+{
+	// FIXME: duplicated code
+	LLFloaterSnapshot* instance = findInstance();
+	if (instance)
+	{
+		// Disable the send/post/save buttons until snapshot is ready.
+		Impl::updateControls(instance);
+
+		// Force hiding the "Refresh to save" hint because we know we've just started refresh.
+		Impl::setNeedRefresh(instance, false);
+	}
+}
+
+// static
+void LLFloaterSnapshot::postUpdate()
+{
+	// FIXME: duplicated code
+	LLFloaterSnapshot* instance = findInstance();
+	if (instance)
+	{
+		// Enable the send/post/save buttons.
+		Impl::updateControls(instance);
+
+		// We've just done refresh.
+		Impl::setNeedRefresh(instance, false);
+
+		// The refresh button is initially hidden. We show it after the first update,
+		// i.e. when preview appears.
+		if (!instance->mRefreshBtn->getVisible())
+		{
+			instance->mRefreshBtn->setVisible(true);
+		}
+	}
+}
+
+// static
+void LLFloaterSnapshot::postSave()
+{
+	LLFloaterSnapshot* instance = findInstance();
+	if (!instance)
+	{
+		llassert(instance != NULL);
+		return;
+	}
+
+	instance->impl.updateControls(instance);
+	instance->impl.setStatus(Impl::STATUS_WORKING);
+}
+
+// static
+void LLFloaterSnapshot::postPanelSwitch()
+{
+	LLFloaterSnapshot* instance = getInstance();
+	instance->impl.updateControls(instance);
+
+	// Remove the success/failure indicator whenever user presses a snapshot option button.
+	instance->impl.setStatus(Impl::STATUS_READY);
+}
+
+// static
+LLPointer<LLImageFormatted> LLFloaterSnapshot::getImageData()
+{
+	// FIXME: May not work for textures.
+
+	LLFloaterSnapshot* instance = findInstance();
+	if (!instance)
+	{
+		llassert(instance != NULL);
+		return NULL;
+	}
+
+	LLSnapshotLivePreview* previewp = Impl::getPreviewView(instance);
+	if (!previewp)
+	{
+		llassert(previewp != NULL);
+		return NULL;
+	}
+
+	LLPointer<LLImageFormatted> img = previewp->getFormattedImage();
+	if (!img.get())
+	{
+		LL_WARNS() << "Empty snapshot image data" << LL_ENDL;
+		llassert(img.get() != NULL);
+	}
+
+	return img;
+}
+
+// static
+const LLVector3d& LLFloaterSnapshot::getPosTakenGlobal()
+{
+	LLFloaterSnapshot* instance = findInstance();
+	if (!instance)
+	{
+		llassert(instance != NULL);
+		return LLVector3d::zero;
+	}
+
+	LLSnapshotLivePreview* previewp = Impl::getPreviewView(instance);
+	if (!previewp)
+	{
+		llassert(previewp != NULL);
+		return LLVector3d::zero;
+	}
+
+	return previewp->getPosTakenGlobal();
+}
+
+// static
+void LLFloaterSnapshot::setAgentEmail(const std::string& email)
+{
+	LLFloaterSnapshot* instance = findInstance();
+	if (instance)
+	{
+		// <FS:Zi> Adapt code to new tab widget
+// 		LLSideTrayPanelContainer* panel_container = instance->getChild<LLSideTrayPanelContainer>("panel_container");
+// 		LLPanel* postcard_panel = panel_container->getPanelByName("panel_snapshot_postcard");
+		LLPanel* postcard_panel=instance->getChild<LLPanel>("panel_snapshot_postcard");
+		postcard_panel->notify(LLSD().with("agent-email", email));
+		// </FS:Zi>
+	}
+}
+
+// <FS:Zi> Called whenever the snapshot destination is changed
+void LLFloaterSnapshot::onSelectDestination()
+{
+	static LLPanelSnapshot* previousPanel;
+
+	LLPanelSnapshot* panel=(LLPanelSnapshot*) getChild<LLTabContainer>("panel_tab_container")->getCurrentPanel();
+	if(!panel)
+	{
+		LL_WARNS() << "no active snapshot destination found" << LL_ENDL;
+		return;
+	}
+
+	// postPanelSwitch uses getInstance() on us, but we won't have retgistered in the singleton handler
+	// until then, so we'd run into a loop. Make sure we don't update on first run. <FS:Zi>
+	if(previousPanel!=0)
+	{
+		panel->onOpen(LLSD());
+		postPanelSwitch();
+	}
+	previousPanel=panel;
+}
+// </FS:Zi>
+
+///----------------------------------------------------------------------------
+/// Class LLSnapshotFloaterView
+///----------------------------------------------------------------------------
+
+LLSnapshotFloaterView::LLSnapshotFloaterView (const Params& p) : LLFloaterView (p)
+{
+}
+
+LLSnapshotFloaterView::~LLSnapshotFloaterView()
+{
+}
+
+BOOL LLSnapshotFloaterView::handleKey(KEY key, MASK mask, BOOL called_from_parent)
+{
+	// use default handler when not in freeze-frame mode
+	if(!gSavedSettings.getBOOL("FreezeTime"))
+	{
+		return LLFloaterView::handleKey(key, mask, called_from_parent);
+	}
+
+	if (called_from_parent)
+	{
+		// pass all keystrokes down
+		LLFloaterView::handleKey(key, mask, called_from_parent);
+	}
+	else
+	{
+		// bounce keystrokes back down
+		LLFloaterView::handleKey(key, mask, TRUE);
+	}
+	return TRUE;
+}
+
+BOOL LLSnapshotFloaterView::handleMouseDown(S32 x, S32 y, MASK mask)
+{
+	// use default handler when not in freeze-frame mode
+	if(!gSavedSettings.getBOOL("FreezeTime"))
+	{
+		return LLFloaterView::handleMouseDown(x, y, mask);
+	}
+	// give floater a change to handle mouse, else camera tool
+	if (childrenHandleMouseDown(x, y, mask) == NULL)
+	{
+		LLToolMgr::getInstance()->getCurrentTool()->handleMouseDown( x, y, mask );
+	}
+	return TRUE;
+}
+
+BOOL LLSnapshotFloaterView::handleMouseUp(S32 x, S32 y, MASK mask)
+{
+	// use default handler when not in freeze-frame mode
+	if(!gSavedSettings.getBOOL("FreezeTime"))
+	{
+		return LLFloaterView::handleMouseUp(x, y, mask);
+	}
+	// give floater a change to handle mouse, else camera tool
+	if (childrenHandleMouseUp(x, y, mask) == NULL)
+	{
+		LLToolMgr::getInstance()->getCurrentTool()->handleMouseUp( x, y, mask );
+	}
+	return TRUE;
+}
+
+BOOL LLSnapshotFloaterView::handleHover(S32 x, S32 y, MASK mask)
+{
+	// use default handler when not in freeze-frame mode
+	// <FS:Ansariel> Replace frequently called gSavedSettings
+	//if(!gSavedSettings.getBOOL("FreezeTime"))
+	static LLCachedControl<bool> sFreezeTime(gSavedSettings, "FreezeTime");
+	if(!sFreezeTime)
+	// </FS:Ansariel>
+	{
+		return LLFloaterView::handleHover(x, y, mask);
+	}	
+	// give floater a change to handle mouse, else camera tool
+	if (childrenHandleHover(x, y, mask) == NULL)
+	{
+		LLToolMgr::getInstance()->getCurrentTool()->handleHover( x, y, mask );
+	}
+	return TRUE;
+}

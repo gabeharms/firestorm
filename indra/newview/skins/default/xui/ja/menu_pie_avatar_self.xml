@@ -1,0 +1,96 @@
+<?xml version="1.0" encoding="utf-8" standalone="yes" ?>
+<pie_menu
+    name="Self Pie">
+    <pie_slice
+        label="プロフィール..."
+        name="Profile..."/>
+    <pie_slice
+        label="グループ..."
+        name="Groups..."/>
+    <pie_menu
+        label="取り外す＞"
+        name="Take Off &gt;">
+        <pie_menu
+            label="服＞"
+            name="Clothes &gt;"/>
+            <pie_slice
+                label="シャツ"
+                name="Shirt"/>
+            <pie_slice
+                label="ズボン"
+                name="Pants"/>
+            <pie_slice
+                label="靴"
+                name="Shoes"/>
+            <pie_slice
+                label="靴下"
+                name="Socks"/>
+            <pie_slice
+                label="ジャケット"
+                name="Jacket"/>
+            <pie_slice
+                label="手袋"
+                name="Gloves"/>
+            <pie_menu
+                label="詳細"
+                name="Clothes More">
+                <pie_slice
+                    label="（下着の）シャツ"
+                    name="Self Undershirt"/>
+                <pie_slice
+                    label="すべての服"
+                    name="All Clothes"/>
+                <pie_slice
+                    label="（下着の）パンツ"
+                    name="Self Underpants"/>
+                <pie_slice
+                    label="タトゥー"
+                    name="Self Tattoo"/>
+                <pie_slice
+					label="物理作用"
+					name="Self Physics"/>
+                <pie_slice
+                    label="アルファ"
+                    name="Self Alpha"/>
+            </pie_menu>
+            <pie_slice
+                label="スカート"
+                name="Skirt"/>
+        </pie_menu>
+        <pie_menu
+            label="HUD＞"
+            name="Pie Object Detach HUD" />
+        <pie_menu
+            label="取り外す"
+            name="Pie Object Detach" />
+        <pie_slice
+            label="すべて取り外す"
+            name="Detach All"/>
+    </pie_menu>
+    <pie_slice
+        label="ここに座る"
+        name="Sit Down Here"/>
+    <pie_slice
+        label="立ち上がる"
+        name="Stand Up"/>
+    <pie_slice
+        label="スクリプト情報"
+        name="ScriptInfo"/>
+    <pie_slice
+        label="ジェスチャー..."
+        name="Gestures"/>
+    <pie_menu
+        label="容姿＞"
+        name="Appearance &gt;">
+        <pie_slice label="シェイプを編集"
+           name="Edit My Shape"/>
+        <pie_slice
+            label="テクスチャ更新"
+            name="Texture Refresh"/>
+        <pie_slice label="服装を編集"
+           name="Edit My Outfit"/>
+    </pie_menu>
+    <pie_slice
+        label="デバッグ..."
+        name="Debug..."/>
+</pie_menu>

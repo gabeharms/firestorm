@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="utf-8" standalone="yes"?>
+<floater name="block by name" title="Zablokuj obiekt według nazwy">
+	<text name="message">
+		Zablokuj obiekt:
+	</text>
+	<line_editor name="object_name">
+		Nazwa obiektu
+	</line_editor>
+	<text name="note">
+		* blokuje jedynie tekst obiektu, nie dźwięk
+	</text>
+	<button label="OK" name="OK"/>
+	<button label="Anuluj" name="Cancel"/>
+</floater>

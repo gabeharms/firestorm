@@ -1,0 +1,76 @@
+<?xml version="1.0" encoding="utf-8" standalone="yes"?>
+<floater name="Statistics" title="ESTATÍSTICAS">
+	<scroll_container name="statistics_scroll">
+		<container_view name="statistics_view">
+			<stat_view label="Básico" name="basic">
+				<stat_bar label="FPS" name="fps"/>
+				<stat_bar label="Bandwidth" name="bandwidth"/>
+				<stat_bar label="Bandwidth" name="packet_loss"/>
+				<stat_bar label="Ping Sim" name="ping"/>
+			</stat_view>
+			<stat_view label="Avançado" name="advanced">
+				<stat_view label="Render" name="render">
+					<stat_bar label="KTris desenhados por quadro" name="ktrisframe"/>
+					<stat_bar label="KTris desenhados por segundo" name="ktrissec"/>
+					<stat_bar label="Total Objects" name="objs"/>
+					<stat_bar label="New Objects" name="newobjs"/>
+					<stat_bar label="Taxa de acertos do cache do objeto" name="object_cache_hits"/>
+				</stat_view>
+				<stat_view label="Texture" name="texture">
+					<stat_bar label="Taxa de acertos do cache" name="texture_cache_hits"/>
+					<stat_bar label="Latência de leitura do cache" name="texture_cache_read_latency"/>
+					<stat_bar label="Count" name="numimagesstat"/>
+					<stat_bar label="Raw Count" name="numrawimagesstat"/>
+					<stat_bar label="GL Mem" name="gltexmemstat"/>
+					<stat_bar label="Formatted Mem" name="formattedmemstat"/>
+					<stat_bar label="Raw Mem" name="rawmemstat"/>
+					<stat_bar label="Bound Mem" name="glboundmemstat"/>
+				</stat_view>
+				<stat_view label="Rede" name="network">
+					<stat_bar label="Packets In" name="packetsinstat"/>
+					<stat_bar label="Packets Out" name="packetsoutstat"/>
+					<stat_bar label="Objects" name="objectkbitstat"/>
+					<stat_bar label="Texture" name="texturekbitstat"/>
+					<stat_bar label="Asset" name="assetkbitstat"/>
+					<stat_bar label="Layers" name="layerskbitstat"/>
+					<stat_bar label="Actual In" name="actualinkbitstat"/>
+					<stat_bar label="Actual Out" name="actualoutkbitstat"/>
+					<stat_bar label="Operações pendentes do VFS" name="vfspendingoperations"/>
+				</stat_view>
+			</stat_view>
+			<stat_view label="Simulator" name="sim">
+				<stat_bar label="Time Dilation" name="simtimedilation"/>
+				<stat_bar label="Sim FPS" name="simfps"/>
+				<stat_bar label="Physics FPS" name="simphysicsfps"/>
+				<stat_view label="Physics Details" name="physicsdetail">
+					<stat_bar label="Pinned Objects" name="physicspinnedtasks"/>
+					<stat_bar label="Low LOD Objects" name="physicslodtasks"/>
+					<stat_bar label="Memory Allocated" name="physicsmemoryallocated"/>
+				</stat_view>
+				<stat_bar label="Scripts executados" name="simpctscriptsrun"/>
+				<stat_view label="Pathfinding" name="simpathfinding">
+					<stat_bar label="Tempo de etapa de AI" name="simsimaistepmsec"/>
+					<stat_bar label="Etapas de silhueta ignoradas" name="simsimskippedsilhouettesteps"/>
+					<stat_bar label="Personagens atualizados" name="simsimpctsteppedcharacters"/>
+				</stat_view>
+				<stat_view label="Time (ms)" name="simperf">
+					<stat_bar label="Total Frame Time" name="simframemsec"/>
+					<stat_bar label="Net Time" name="simnetmsec"/>
+					<stat_bar label="Physics Time" name="simsimphysicsmsec"/>
+					<stat_bar label="Simulation Time" name="simsimothermsec"/>
+					<stat_bar label="Agent Time" name="simagentmsec"/>
+					<stat_bar label="Images Time" name="simimagesmsec"/>
+					<stat_bar label="Script Time" name="simscriptmsec"/>
+					<stat_bar label="Tempo restante" name="simsparemsec"/>
+					<stat_view label="Detalhes de tempo (ms)" name="timedetails">
+						<stat_bar label="Etapa física" name="simsimphysicsstepmsec"/>
+						<stat_bar label="Atualizar formas físicas" name="simsimphysicsshapeupdatemsec"/>
+						<stat_bar label="Física - outros" name="simsimphysicsothermsec"/>
+						<stat_bar label="Tempo de espera" name="simsleepmsec"/>
+						<stat_bar label="Bombear ES" name="simpumpiomsec"/>
+					</stat_view>
+				</stat_view>
+			</stat_view>
+		</container_view>
+	</scroll_container>
+</floater>

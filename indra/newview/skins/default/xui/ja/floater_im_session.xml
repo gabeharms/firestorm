@@ -1,0 +1,70 @@
+<?xml version="1.0" encoding="utf-8" standalone="yes"?>
+<floater name="panel_im">
+
+    <floater.string
+     name="participant_added"
+     value="[NAME] がこの会話に招待されました。"/>
+    <floater.string
+     name="multiple_participants_added"
+     value="[NAME] が会話に招待されました。"/>
+    <floater.string
+     name="tooltip_to_separate_window"
+     value="この会話を別ウィンドウで開きます。"/>
+    <floater.string
+     name="tooltip_to_main_window"
+     value="この会話をメインウィンドウに戻します。"/>
+    <floater.string
+     name="start_call_button_tooltip"
+     value="ボイス接続を開きます。"/>
+    <floater.string
+     name="end_call_button_tooltip"
+     value="ボイス接続を切断します。"/>
+    <floater.string
+     name="expcol_button_not_tearoff_tooltip"
+     value="この列を畳みます。"/>
+    <floater.string
+     name="expcol_button_tearoff_and_expanded_tooltip"
+     value="参加者リストを畳みます。"/>
+    <floater.string
+     name="expcol_button_tearoff_and_collapsed_tooltip"
+     value="参加者リストを開きます。"/>
+    <view name="contents_view">
+	<layout_stack name="main_stack">
+		<layout_panel name="toolbar_panel">
+			<menu_button name="view_options_btn" tool_tip="View/sort options" />
+            <menu_button name="gear_btn" tool_tip="Actions on selected person" />
+            <button name="add_btn" tool_tip="Add someone to this conversation" />
+            <button name="voice_call_btn" tool_tip="Open voice connection" />
+            <output_monitor name="speaking_indicator" />
+            <button name="close_btn" tool_tip="End this conversation" />
+            <button name="expand_collapse_btn" tool_tip="Collapse/Expand this pane" />
+            <button name="tear_off_btn" />
+		</layout_panel>
+        <layout_panel name="body_panel">
+			<layout_stack name="im_panels">
+				<layout_panel name="speakers_list_panel" />
+				<layout_panel name="right_part_holder">
+						<layout_stack name="translate_and_chat_stack">
+							<layout_panel name="translate_chat_checkbox_lp">
+								<check_box label="チャットを翻訳" name="translate_chat_checkbox"/>
+						</layout_panel>
+						<layout_panel name="chat_holder">
+							<chat_history name="chat_history" />
+							</layout_panel>
+						</layout_stack>
+					</layout_panel>
+				</layout_stack>
+			</layout_panel>
+			<layout_panel name="chat_layout_panel">
+				<layout_stack name="input_panels">
+					<layout_panel name="input_editor_layout_panel">
+						<chat_editor label="宛先" name="chat_editor"/>
+					</layout_panel>
+					<layout_panel name="input_button_layout_panel">
+						<button name="minz_btn" tool_tip="メッセージパネルの表示 / 非表示"/>
+					</layout_panel>
+				</layout_stack>
+			</layout_panel>
+		</layout_stack>
+	</view>
+</floater>

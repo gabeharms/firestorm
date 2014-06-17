@@ -1,0 +1,38 @@
+<?xml version="1.0" encoding="utf-8" standalone="yes"?>
+<!--alba: removed all 'new...' used for clothes (redundant)
++ added physics + changed 'pluriel' to 'singulier' (grammatical mistake)-->
+<menu name="menu_inventory_add">
+	<menu label="Importer" name="upload">
+		<menu_item_call label="Image ([COST])..." name="Upload Image"/>
+		<menu_item_call label="Son ([COST])..." name="Upload Sound"/>
+		<menu_item_call label="Animation ([COST])..." name="Upload Animation"/>
+		<menu_item_call label="Modèle..." name="Upload Model"/>
+		<menu_item_call label="Assistant Modèle..." name="Upload Model Wizard"/>
+		<menu_item_call label="Lot ([COST] par fichier)..." name="Bulk Upload"/>
+		<menu_item_call label="Définir les droits de chargement par défaut" name="perm prefs"/>
+	</menu>
+	<menu_item_call label="Nouveau dossier" name="New Folder"/>
+	<menu_item_call label="Nouveau script" name="New Script"/>
+	<menu_item_call label="Nouvelle note" name="New Note"/>
+	<menu_item_call label="Nouveau geste" name="New Gesture"/>
+	<menu label="Nouvel habit" name="New Clothes">
+		<menu_item_call label="Chemise" name="New Shirt"/>
+		<menu_item_call label="Pantalon" name="New Pants"/>
+		<menu_item_call label="Chaussures" name="New Shoes"/>
+		<menu_item_call label="Chaussettes" name="New Socks"/>
+		<menu_item_call label="Veste" name="New Jacket"/>
+		<menu_item_call label="Jupe" name="New Skirt"/>
+		<menu_item_call label="Gants" name="New Gloves"/>
+		<menu_item_call label="Débardeur" name="New Undershirt"/>
+		<menu_item_call label="Caleçon" name="New Underpants"/>
+		<menu_item_call label="Alpha" name="New Alpha"/>
+		<menu_item_call label="Tatouage" name="New Tattoo"/>
+		<menu_item_call label="Physique" name="New Physics"/>
+	</menu>
+	<menu label="Nouvelle partie du corps" name="New Body Parts">
+		<menu_item_call label="Silhouette" name="New Shape"/>
+		<menu_item_call label="Peau" name="New Skin"/>
+		<menu_item_call label="Cheveux" name="New Hair"/>
+		<menu_item_call label="Yeux" name="New Eyes"/>
+	</menu>
+</menu>

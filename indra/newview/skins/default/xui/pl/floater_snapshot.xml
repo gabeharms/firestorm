@@ -1,0 +1,98 @@
+<?xml version="1.0" encoding="utf-8" standalone="yes"?>
+<floater name="Snapshot" title="Podgląd zdjęcia">
+	<floater.string name="unknown">
+		nieznany
+	</floater.string>
+	<string name="postcard_progress_str">
+		Wysyłanie Email
+	</string>
+	<string name="facebook_progress_str">
+		Wysyłanie na Facebooka
+	</string>
+	<string name="profile_progress_str">
+		Wysyłanie
+	</string>
+	<string name="flickr_progress_str">
+		Komunikacja z Flickr
+	</string>
+	<string name="inventory_progress_str">
+		Zapisywanie do Szafy
+	</string>
+	<string name="local_progress_str">
+		Zapisywanie na komputer
+	</string>
+	<string name="facebook_succeeded_str">
+		Obraz załadowany
+	</string>
+	<string name="profile_succeeded_str">
+		Obraz załadowany
+	</string>
+	<string name="flickr_succeeded_str">
+		Obraz załadowany na Flickr
+	</string>
+	<string name="postcard_succeeded_str">
+		Email wysłany
+	</string>
+	<string name="inventory_succeeded_str">
+		Zapisano do Szafy
+	</string>
+	<string name="local_succeeded_str">
+		Zapisano na komputerze
+	</string>
+	<string name="facebook_failed_str">
+		Publikacja obrazu na osi czasu nie powiodła się.
+	</string>
+	<string name="profile_failed_str">
+		Publikacja obrazu na kanale nie powiodła się.
+	</string>
+	<string name="postcard_failed_str">
+		Wysyłanie emaila nie powiodło się.
+	</string>
+	<string name="inventory_failed_str">
+		Zapis do Szafy nie powiódł się.
+	</string>
+	<string name="local_failed_str">
+		Zapis na komputerze nie powiódł się.
+	</string>
+	<string name="flickr_failed_str">
+		Ładowanie na Flickr nie powiodło się.
+	</string>
+	<ui_ctrl name="thumbnail_placeholder">
+		<panel name="succeeded_panel">
+			<text name="succeeded_lbl">
+				Powodzenie
+			</text>
+		</panel>
+		<panel name="failed_panel">
+			<text name="failed_lbl">
+				Niepowodzenie
+			</text>
+		</panel>
+		<text name="working_lbl">
+			Pracuję
+		</text>
+		<text name="refresh_lbl">
+			Zrób na nowo
+		</text>
+	</ui_ctrl>
+	<tab_container name="panel_tab_container">
+		<panel label="Profil" name="panel_snapshot_profile"/>
+		<panel label="Szafa" name="panel_snapshot_inventory"/>
+		<panel label="Dysk" name="panel_snapshot_local"/>
+	</tab_container>
+	<panel name="advanced_options_panel">
+		<text name="layer_type_label">
+			Uchwyć:
+		</text>
+		<combo_box label="Warstwy" name="layer_types">
+			<combo_box.item label="Kolory" name="Colors"/>
+			<combo_box.item label="Głębia" name="Depth"/>
+		</combo_box>
+		<check_box label="Interfejs" name="ui_check"/>
+		<check_box label="Stan L$" name="currency_check"/>
+		<check_box label="Obiekty HUD" name="hud_check"/>
+		<check_box label="Pełne okno" name="freeze_frame_check"/>
+		<check_box label="Autoodświeżanie" name="auto_snapshot_check"/>
+	</panel>
+	<button name="advanced_options_btn" tool_tip="Opcje zaawansowane" />
+</floater>

@@ -1,0 +1,65 @@
+<?xml version="1.0" encoding="utf-8" standalone="yes"?>
+<floater name="Snapshot" title="VISUALIZAR FOTO">
+	<floater.string name="unknown">
+		desconhecido
+	</floater.string>
+	<string name="postcard_progress_str">
+		Enviando e-mail
+	</string>
+	<string name="profile_progress_str">
+		Postando
+	</string>
+	<string name="inventory_progress_str">
+		Salvando no inventário
+	</string>
+	<string name="local_progress_str">
+		Salvo no computador
+	</string>
+	<string name="profile_succeeded_str">
+		Imagem carregada
+	</string>
+	<string name="postcard_succeeded_str">
+		E-mail enviado!
+	</string>
+	<string name="inventory_succeeded_str">
+		Salvo no inventário!
+	</string>
+	<string name="local_succeeded_str">
+		Salvo no computador!
+	</string>
+	<string name="profile_failed_str">
+		Falha ao carregar a imagem no feed do seu perfil.
+	</string>
+	<string name="postcard_failed_str">
+		Falha ao enviar e-mail.
+	</string>
+	<string name="inventory_failed_str">
+		Falha ao salvar no inventário.
+	</string>
+	<string name="local_failed_str">
+		Falha ao salvar no computador.
+	</string>
+	<button name="advanced_options_btn" tool_tip="Opções avançadas"/>
+	<text name="image_res_text">
+		[WIDTH] x [HEIGHT] px
+	</text>
+	<text name="file_size_label">
+		[TAMANHO] KB
+	</text>
+	<panel name="advanced_options_panel">
+		<text name="advanced_options_label">
+			OPÇÕES AVANÇADAS
+		</text>
+		<text name="layer_type_label">
+			Capturar:
+		</text>
+		<combo_box label="Camadas da imagem" name="layer_types">
+			<combo_box.item label="Cores" name="Colors"/>
+			<combo_box.item label="Profundidade" name="Depth"/>
+		</combo_box>
+		<check_box label="Interface" name="ui_check"/>
+		<check_box label="HUDs" name="hud_check"/>
+		<check_box label="Gerar quadro (tela inteira)" name="freeze_frame_check"/>
+		<check_box label="Atualização automática" name="auto_snapshot_check"/>
+	</panel>
+</floater>
