@@ -345,7 +345,8 @@ fi
 if [ \( $WANTS_VERSION -eq $TRUE \) -o \( $WANTS_CONFIG -eq $TRUE \) ] ; then
     echo "Versioning..."
     pushd ..
-    buildVer=`hg summary | head -1 | cut -d " "  -f 2 | cut -d : -f 1 | grep "[0-9]*"`
+    #buildVer=`hg summary | head -1 | cut -d " "  -f 2 | cut -d : -f 1 | grep "[0-9]*"`
+    buildVer=`git rev-parse HEAD | cut -c1-7`
     majorVer=`cat indra/Version | cut -d "=" -f 2 | cut -d "." -f 1`
     minorVer=`cat indra/Version | cut -d "=" -f 2 | cut -d "." -f 2`
     patchVer=`cat indra/Version | cut -d "=" -f 2 | cut -d "." -f 3`
@@ -429,7 +430,7 @@ if [ $WANTS_CONFIG -eq $TRUE ] ; then
         UNATTENDED="-DUNATTENDED=ON"
     fi
 
-    cmake -G "$TARGET" ../indra $CHANNEL $FMODEX $KDU $LEAPMOTION $OPENSIM $AVX_OPTIMIZATION $PACKAGE $UNATTENDED -DLL_TESTS:BOOL=OFF -DWORD_SIZE:STRING=$WORD_SIZE -DCMAKE_BUILD_TYPE:STRING=$BTYPE \
+    env revision=0 cmake -G "$TARGET" ../indra $CHANNEL $FMODEX $KDU $LEAPMOTION $OPENSIM $AVX_OPTIMIZATION $PACKAGE $UNATTENDED -DLL_TESTS:BOOL=OFF -DWORD_SIZE:STRING=$WORD_SIZE -DCMAKE_BUILD_TYPE:STRING=$BTYPE \
           -DNDTARGET_ARCH="${TARGET_ARCH}" -DROOT_PROJECT_NAME:STRING=Firestorm $LL_ARGS_PASSTHRU | tee $LOG
 
     if [ $PLATFORM == "win32" ] ; then
