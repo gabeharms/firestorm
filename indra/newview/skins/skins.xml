@@ -2,6 +2,22 @@
   <array>
     <map>
       <key>name</key>
+      <string>Moses</string>
+      <key>folder</key>
+      <string>moses</string>
+      <key>themes</key>
+      <array>
+        <map>
+          <key>name</key>
+          <string>blue</string>
+          <key>folder</key>
+          <string>blue</string>
+        </map>
+      </array>
+    </map>
+
+    <map>
+      <key>name</key>
       <string>AnsaStorm</string>
       <key>folder</key>
       <string>ansastorm</string>
